@@ -1,101 +1,184 @@
-"""Shared fixtures for the test suite."""
+"""Shared fixtures — sample policy mirrors the real PLUM_GHI_2024 structure."""
 
 from __future__ import annotations
 
 import json
-import os
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 
-# Make sure the backend package root is importable regardless of where
-# pytest is invoked from.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-
+# ---------------------------------------------------------------------------
+# Sample policy matching the real PLUM_GHI_2024 structure exactly
+# ---------------------------------------------------------------------------
 SAMPLE_POLICY: dict = {
-    "policy_id": "PLM-TEST-001",
-    "insurer": "Test Insurance Co",
-    "product_name": "Plum Health Plus",
-    "members": [
-        {
-            "member_id": "MEM001",
-            "name": "Alice Sharma",
-            "date_of_joining": "2024-01-01",
-            "sum_insured": 500000.0,
-            "pre_existing_conditions": ["hypertension"],
+    "policy_id": "PLUM_GHI_2024",
+    "policy_name": "Group Health Insurance — Standard Plan",
+    "insurer": "ICICI Lombard General Insurance",
+    "coverage": {
+        "sum_insured_per_employee": 500000,
+        "annual_opd_limit": 50000,
+        "per_claim_limit": 5000,
+    },
+    "opd_categories": {
+        "consultation": {
+            "sub_limit": 2000,
+            "copay_percent": 10,
+            "network_discount_percent": 20,
+            "covered": True,
         },
-        {
-            "member_id": "MEM002",
-            "name": "Bob Patel",
-            "date_of_joining": "2026-05-15",
-            "sum_insured": 300000.0,
-            "pre_existing_conditions": [],
+        "diagnostic": {
+            "sub_limit": 10000,
+            "copay_percent": 0,
+            "network_discount_percent": 10,
+            "pre_auth_threshold": 10000,
+            "high_value_tests_requiring_pre_auth": ["MRI", "CT Scan", "PET Scan"],
+            "covered": True,
         },
-    ],
+        "pharmacy": {
+            "sub_limit": 15000,
+            "copay_percent": 0,
+            "covered": True,
+        },
+        "dental": {
+            "sub_limit": 10000,
+            "copay_percent": 0,
+            "covered": True,
+            "covered_procedures": ["Root Canal Treatment", "Tooth Extraction", "Dental Filling"],
+            "excluded_procedures": [
+                "Teeth Whitening",
+                "Veneers",
+                "Orthodontic Treatment (Braces)",
+                "Bleaching",
+            ],
+        },
+        "vision": {
+            "sub_limit": 5000,
+            "copay_percent": 0,
+            "covered": True,
+            "excluded_items": ["LASIK Surgery", "Refractive Surgery"],
+        },
+        "alternative_medicine": {
+            "sub_limit": 8000,
+            "copay_percent": 0,
+            "covered": True,
+        },
+    },
     "waiting_periods": {
         "initial_waiting_period_days": 30,
-        "pre_existing_condition_days": 365,
+        "pre_existing_conditions_days": 365,
         "specific_conditions": {
             "diabetes": 90,
+            "hypertension": 90,
             "maternity": 270,
+            "obesity_treatment": 365,
+            "cataract": 365,
         },
-    },
-    "coverage": {
-        "sub_limits": {
-            "DENTAL": 20000.0,
-            "VISION": 10000.0,
-            "PHARMACY": 50000.0,
-            "ALTERNATIVE_MEDICINE": 15000.0,
-        },
-        "copay_percent": 10.0,
-        "non_network_penalty_percent": 20.0,
     },
     "exclusions": {
-        "procedures": ["lasik", "teeth whitening", "cosmetic surgery"],
-        "diagnoses": ["self-inflicted injury"],
-        "claim_type_exclusions": {
-            "DENTAL": ["orthodontic retainer"],
-        },
+        "conditions": [
+            "Self-inflicted injuries",
+            "Obesity and weight loss programs",
+            "Bariatric surgery",
+            "Cosmetic or aesthetic procedures",
+            "Experimental treatments",
+            "Health supplements and tonics",
+        ],
+        "dental_exclusions": [
+            "Teeth whitening",
+            "Orthodontic treatment",
+            "Cosmetic dental procedures",
+            "Veneers",
+            "Bleaching",
+        ],
+        "vision_exclusions": [
+            "LASIK",
+            "Refractive surgery",
+            "Cosmetic eye surgery",
+        ],
     },
     "document_requirements": {
-        "PHARMACY": {
-            "required": ["PRESCRIPTION", "PHARMACY_BILL"],
-            "optional": ["LAB_REPORT"],
-        },
         "CONSULTATION": {
-            "required": ["HOSPITAL_BILL"],
-            "optional": ["PRESCRIPTION", "LAB_REPORT", "DIAGNOSTIC_REPORT"],
+            "required": ["PRESCRIPTION", "HOSPITAL_BILL"],
+            "optional": ["LAB_REPORT", "DIAGNOSTIC_REPORT"],
         },
         "DIAGNOSTIC": {
-            "required": ["DIAGNOSTIC_REPORT"],
-            "optional": ["PRESCRIPTION"],
+            "required": ["PRESCRIPTION", "LAB_REPORT", "HOSPITAL_BILL"],
+            "optional": ["DISCHARGE_SUMMARY"],
+        },
+        "PHARMACY": {
+            "required": ["PRESCRIPTION", "PHARMACY_BILL"],
+            "optional": [],
         },
         "DENTAL": {
-            "required": ["DENTAL_REPORT", "HOSPITAL_BILL"],
+            "required": ["HOSPITAL_BILL"],
+            "optional": ["PRESCRIPTION", "DENTAL_REPORT"],
+        },
+        "VISION": {
+            "required": ["PRESCRIPTION", "HOSPITAL_BILL"],
+            "optional": [],
+        },
+        "ALTERNATIVE_MEDICINE": {
+            "required": ["PRESCRIPTION", "HOSPITAL_BILL"],
             "optional": [],
         },
     },
     "pre_authorization": {
-        "amount_threshold": 100000.0,
-        "required_for_types": [],
-        "required_procedures": ["bypass surgery", "organ transplant"],
+        "required_for": [
+            "MRI scan (amount > 10000)",
+            "CT scan (amount > 10000)",
+            "PET scan",
+        ],
+        "validity_days": 30,
     },
     "network_hospitals": [
         "Apollo Hospitals",
         "Fortis Healthcare",
-        "Max Super Speciality",
-        "Manipal Hospital",
+        "Max Healthcare",
+        "Manipal Hospitals",
+        "Narayana Health",
     ],
-    "fraud_detection": {
-        "thresholds": {
-            "high_value_claim": 200000.0,
-            "max_same_day_claims": 3,
-            "max_monthly_claims": 5,
-        }
+    "fraud_thresholds": {
+        "same_day_claims_limit": 2,
+        "monthly_claims_limit": 6,
+        "high_value_claim_threshold": 25000,
+        "auto_manual_review_above": 25000,
     },
+    "members": [
+        {
+            "member_id": "EMP001",
+            "name": "Rajesh Kumar",
+            "join_date": "2024-04-01",
+            "relationship": "SELF",
+        },
+        {
+            "member_id": "EMP002",
+            "name": "Priya Singh",
+            "join_date": "2024-04-01",
+            "relationship": "SELF",
+        },
+        {
+            "member_id": "EMP005",
+            "name": "Vikram Joshi",
+            "join_date": "2024-09-01",
+            "relationship": "SELF",
+        },
+        {
+            "member_id": "EMP010",
+            "name": "Deepak Shah",
+            "join_date": "2024-04-01",
+            "relationship": "SELF",
+        },
+        # Recently joined member (still within initial 30-day period as of 2024-05-10)
+        {
+            "member_id": "EMP_NEW",
+            "name": "New Employee",
+            "join_date": "2024-05-01",
+            "relationship": "SELF",
+        },
+    ],
 }
 
 

@@ -11,10 +11,8 @@ logger = logging.getLogger(__name__)
 
 class PolicyEvaluationAgent:
     """
-    Runs the full suite of policy checks against extracted claim data.
-
-    Day 1: skeleton wiring all PolicyEngine methods together.
-    Day 2: integrated into the LangGraph pipeline.
+    Runs the full suite of policy checks against extracted claim data and
+    returns a combined evaluation result for the DecisionAgent.
     """
 
     def __init__(self, policy_engine: PolicyEngine) -> None:
@@ -30,17 +28,22 @@ class PolicyEvaluationAgent:
         diagnosis: list[str],
         treatment_items: list[str],
         hospital_name: str,
+        line_items: list[dict] | None = None,
     ) -> dict:
         """
         Run all policy checks and return a combined evaluation result.
 
+        *line_items* is an optional list of ``{description: str, amount: float}``
+        dicts extracted from the bill.  When provided, item-level exclusion
+        filtering is applied (enabling partial approvals).
+
         Returns a dict with keys:
-        - waiting_period: result of check_waiting_period
-        - exclusions: result of check_exclusions
-        - eligible_amount: result of calculate_eligible_amount
-        - pre_auth: result of requires_pre_authorization
-        - is_network_hospital: bool
-        - passed: bool (True only when all checks pass)
+        - waiting_period
+        - exclusions
+        - eligible_amount
+        - pre_auth
+        - is_network_hospital
+        - passed
         """
         logger.info(
             "PolicyEvaluationAgent.evaluate started: member=%s type=%s amount=%.2f",
@@ -51,20 +54,30 @@ class PolicyEvaluationAgent:
 
         is_network = self.policy_engine.is_network_hospital(hospital_name)
 
-        waiting = self.policy_engine.check_waiting_period(member_id, claim_date, diagnosis)
-        exclusions = self.policy_engine.check_exclusions(claim_type, diagnosis, treatment_items)
+        waiting = self.policy_engine.check_waiting_period(
+            member_id, claim_date, diagnosis
+        )
+        exclusions = self.policy_engine.check_exclusions(
+            claim_type, diagnosis, treatment_items
+        )
+
+        items = line_items or []
         eligible = self.policy_engine.calculate_eligible_amount(
             member_id=member_id,
             claim_type=claim_type,
             claimed_amount=claimed_amount,
             is_network_hospital=is_network,
-            items=[{"description": t, "amount": 0} for t in treatment_items],
+            items=items,
         )
         pre_auth = self.policy_engine.requires_pre_authorization(
             claim_type, claimed_amount, treatment_items
         )
 
-        passed = waiting["passed"] and not exclusions["excluded"]
+        passed = (
+            waiting["passed"]
+            and not pre_auth["required"]
+            and not eligible.get("per_claim_exceeded")
+        )
 
         result = {
             "waiting_period": waiting,
