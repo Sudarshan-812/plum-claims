@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -66,6 +66,47 @@ class ClaimSubmission(BaseModel):
     documents: list[UploadedDocument]
     hospital_name: Optional[str] = None
     notes: Optional[str] = None
+
+
+class ExtractedLineItem(BaseModel):
+    description: str
+    amount: float
+    quantity: Optional[int] = None
+    unit_price: Optional[float] = None
+
+
+class DocumentParsingResult(BaseModel):
+    document_type: DocumentType
+    filename: str
+
+    patient_name: Optional[str] = None
+    patient_age: Optional[int] = None
+    patient_gender: Optional[str] = None
+
+    doctor_name: Optional[str] = None
+    doctor_registration: Optional[str] = None
+    doctor_specialization: Optional[str] = None
+
+    hospital_name: Optional[str] = None
+    hospital_address: Optional[str] = None
+
+    diagnosis: list[str] = []
+    treatment_items: list[str] = []
+    medicines: list[str] = []
+
+    total_amount: Optional[float] = None
+    line_items: list[ExtractedLineItem] = []
+
+    treatment_date: Optional[str] = None
+    bill_date: Optional[str] = None
+
+    overall_confidence: float = 0.0
+    low_confidence_fields: list[str] = []
+    parsing_notes: list[str] = []
+    extraction_warnings: list[str] = []
+
+    parsing_status: Literal["SUCCESS", "PARTIAL", "FAILED"] = "SUCCESS"
+    error_message: Optional[str] = None
 
 
 class ClaimRecord(BaseModel):

@@ -27,11 +27,24 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Load shared resources on startup; clean up on shutdown."""
+    from config import settings
+
     policy_path = get_policy_path()
     logger.info("Loading policy from %s", policy_path)
     policy_engine = PolicyEngine(policy_path)
+
+    # Create async Anthropic client if key is available
+    anthropic_client = None
+    if settings.anthropic_api_key:
+        try:
+            import anthropic as anthropic_lib
+            anthropic_client = anthropic_lib.AsyncAnthropic(api_key=settings.anthropic_api_key)
+            logger.info("Anthropic client initialised (vision parsing enabled)")
+        except Exception as exc:
+            logger.warning("Could not create Anthropic client: %s — mock parsing will be used", exc)
+
     app.state.policy_engine = policy_engine
-    app.state.orchestrator = ClaimsOrchestrator(policy_engine)
+    app.state.orchestrator = ClaimsOrchestrator(policy_engine, anthropic_client=anthropic_client)
     logger.info("Startup complete — policy_id=%s", policy_engine.policy_id)
     yield
     logger.info("Shutting down")
