@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application settings loaded from environment / .env file."""
 
-    anthropic_api_key: str = ""
+    gemini_api_key: str = ""
     policy_file_path: str = "data/policy_terms.json"
     environment: str = "development"
 

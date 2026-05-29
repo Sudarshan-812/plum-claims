@@ -33,18 +33,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Loading policy from %s", policy_path)
     policy_engine = PolicyEngine(policy_path)
 
-    # Create async Anthropic client if key is available
-    anthropic_client = None
-    if settings.anthropic_api_key:
+    # Create Gemini client if key is available
+    gemini_client = None
+    if settings.gemini_api_key:
         try:
-            import anthropic as anthropic_lib
-            anthropic_client = anthropic_lib.AsyncAnthropic(api_key=settings.anthropic_api_key)
-            logger.info("Anthropic client initialised (vision parsing enabled)")
+            import google.generativeai as genai
+            genai.configure(api_key=settings.gemini_api_key)
+            gemini_client = genai.GenerativeModel("gemini-2.5-flash")
+            logger.info("Gemini client initialised (model=gemini-2.5-flash, vision parsing enabled)")
         except Exception as exc:
-            logger.warning("Could not create Anthropic client: %s — mock parsing will be used", exc)
+            logger.warning("Could not create Gemini client: %s — mock parsing will be used", exc)
 
     app.state.policy_engine = policy_engine
-    app.state.orchestrator = ClaimsOrchestrator(policy_engine, anthropic_client=anthropic_client)
+    app.state.orchestrator = ClaimsOrchestrator(policy_engine, anthropic_client=gemini_client)
     logger.info("Startup complete — policy_id=%s", policy_engine.policy_id)
     yield
     logger.info("Shutting down")
@@ -61,9 +62,10 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
+        "https://plum-claims-six.vercel.app",
         "https://*.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:8000",
     ],
     allow_credentials=True,
     allow_methods=["*"],

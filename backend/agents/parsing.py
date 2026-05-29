@@ -1,8 +1,8 @@
-"""Document parsing agent — uses Claude Vision to extract data from documents."""
+"""Document parsing agent — uses Google Gemini Vision to extract data from documents."""
 
 from __future__ import annotations
 
-import base64
+import io
 import json
 import logging
 import re
@@ -103,40 +103,40 @@ _PROMPTS["DISCHARGE_SUMMARY"]   = _PROMPTS["HOSPITAL_BILL"]
 _PROMPTS["UNKNOWN"]             = _PROMPTS["HOSPITAL_BILL"]
 
 
-def _detect_media_type(filename: str, data: bytes) -> str:
-    """Guess MIME type from filename extension or first bytes (magic)."""
+def _is_pdf(filename: str, data: bytes) -> bool:
+    """Return True if the file is a PDF (by extension or magic bytes)."""
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    if ext in ("jpg", "jpeg"):
-        return "image/jpeg"
-    if ext == "png":
-        return "image/png"
-    if ext == "gif":
-        return "image/gif"
-    if ext == "webp":
-        return "image/webp"
-    if ext == "pdf":
-        return "application/pdf"
-    # Sniff magic bytes
-    if data[:4] == b"%PDF":
-        return "application/pdf"
-    if data[:2] in (b"\xff\xd8", b"\xff\xe0", b"\xff\xe1"):
-        return "image/jpeg"
-    if data[:8] == b"\x89PNG\r\n\x1a\n":
-        return "image/png"
-    return "image/jpeg"  # safe default
+    return ext == "pdf" or data[:4] == b"%PDF"
+
+
+def _bytes_to_pil(document_bytes: bytes, filename: str):
+    """Convert document bytes to a PIL Image, converting PDFs to image first."""
+    import PIL.Image
+
+    if _is_pdf(filename, document_bytes):
+        try:
+            from pdf2image import convert_from_bytes
+            pages = convert_from_bytes(document_bytes, first_page=1, last_page=1, dpi=200)
+            return pages[0]
+        except Exception as exc:
+            logger.warning("pdf2image failed (%s); using blank placeholder image", exc)
+            return PIL.Image.new("RGB", (800, 1100), color=(255, 255, 255))
+
+    return PIL.Image.open(io.BytesIO(document_bytes))
 
 
 class DocumentParsingAgent:
     """
-    Parses uploaded claim documents with Claude Vision.
+    Parses uploaded claim documents with Google Gemini Vision.
 
-    Uses claude-opus-4-5 for production parsing.
-    Falls back to parse_mock() when no Anthropic client is provided.
+    Uses gemini-2.5-flash via the google-generativeai SDK.
+    Falls back to parse_mock() when no Gemini client is provided.
     """
 
-    def __init__(self, anthropic_client=None) -> None:
-        self.client = anthropic_client
-        self.model = "claude-opus-4-5"
+    MODEL = "gemini-2.5-flash"
+
+    def __init__(self, gemini_client=None) -> None:
+        self.client = gemini_client   # google.generativeai.GenerativeModel instance
 
     # ------------------------------------------------------------------
     # Public: real parsing
@@ -148,37 +148,21 @@ class DocumentParsingAgent:
         document_type: DocumentType,
         filename: str,
     ) -> DocumentParsingResult:
-        """Extract structured data from a medical document using Claude Vision."""
+        """Extract structured data from a medical document using Gemini Vision."""
         if self.client is None:
-            logger.info("No Anthropic client; returning mock for %s", filename)
+            logger.info("No Gemini client; returning mock for %s", filename)
             return self.parse_mock(document_type=document_type)
 
-        b64_data = base64.standard_b64encode(document_bytes).decode("utf-8")
-        media_type = _detect_media_type(filename, document_bytes)
         prompt = _PROMPTS.get(document_type.value, _PROMPTS["HOSPITAL_BILL"])
 
         try:
-            response = await self.client.messages.create(
-                model=self.model,
-                max_tokens=2048,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": media_type,
-                                    "data": b64_data,
-                                },
-                            },
-                            {"type": "text", "text": prompt},
-                        ],
-                    }
-                ],
+            image = _bytes_to_pil(document_bytes, filename)
+            # generate_content is synchronous; wrap in thread to keep event loop free
+            import asyncio
+            response = await asyncio.to_thread(
+                self.client.generate_content, [prompt, image]
             )
-            raw_text = response.content[0].text
+            raw_text = response.text
             extracted = self._parse_json_response(raw_text)
 
             if extracted is None:
@@ -313,7 +297,7 @@ class DocumentParsingAgent:
     # ------------------------------------------------------------------
 
     def _parse_json_response(self, text: str) -> Optional[dict]:
-        """Extract JSON from Claude response, tolerating extra prose."""
+        """Extract JSON from Gemini response, tolerating extra prose."""
         text = text.strip()
         # Try direct parse first
         try:
